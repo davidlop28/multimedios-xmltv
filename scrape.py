@@ -60,7 +60,7 @@ TIMEOUT_SECONDS = int(os.getenv("TIMEOUT_SECONDS", "30"))
 
 # Example header on page: "Programación de Jueves 1"
 SECTION_RE = re.compile(
-    r"Programación\s+de\s+([A-Za-zÁÉÍÓÚáéíóúñÑ]+)\s+(\d{1,2})",
+    r"Programación\s+de\s+(Hoy|[A-Za-zÁÉÍÓÚáéíóúñÑ]+)\s*(\d{1,2})?",
     re.IGNORECASE,
 )
 
@@ -172,16 +172,22 @@ def parse_schedule(html: str) -> List[Programme]:
     while i < len(lines):
         ln = lines[i]
 
-        # New day/section?
         m = SECTION_RE.search(ln)
         if m:
-            weekday_es = m.group(1).lower()
-            daynum = int(m.group(2))
-            wd = WEEKDAY_ES.get(weekday_es)
-            if wd is None:
-                current_date = None
+            today_local = datetime.now(TZ).date()
+
+            label = (m.group(1) or "").strip().lower()
+            day_str = m.group(2)
+
+            if label == "hoy":
+                current_date = today_local
             else:
-                current_date = choose_date_for_section(wd, daynum, today_local)
+                wd = WEEKDAY_ES.get(label)
+                if wd is None or not day_str:
+                    current_date = None
+                else:
+                    daynum = int(day_str)
+                    current_date = choose_date_for_section(wd, daynum, today_local)
 
             pending_start_time = None
             i += 1
