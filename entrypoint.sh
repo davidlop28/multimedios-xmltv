@@ -19,13 +19,15 @@ echo "SOURCE_URL=$SOURCE_URL"
 
 # Cron file
 cat > /etc/crontab <<EOF
-$CRON_SCHEDULE python /app/scrape.py >> /var/log/epg.log 2>&1
+$CRON_SCHEDULE python /app/scrape.py
 EOF
 
 # Run once at startup (optional)
 if [ "$RUN_ON_STARTUP" = "true" ]; then
   echo "Running scrape once on startup..."
-  python /app/scrape.py >> /var/log/epg.log 2>&1 || true
+  if ! python /app/scrape.py >> /var/log/epg.log 2>&1; then
+    echo "[WARN] Startup scrape failed — container will serve stale or empty data" >&2
+  fi
 fi
 
 # Serve /output over HTTP

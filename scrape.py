@@ -23,6 +23,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import time as time_module
 from dataclasses import dataclass
 from datetime import datetime, date, time, timedelta
 from zoneinfo import ZoneInfo
@@ -45,11 +46,15 @@ CHANNEL_NAME = os.getenv("CHANNEL_NAME", "Canal 6 Multimedios Monterrey")
 CHANNEL_LANG = os.getenv("CHANNEL_LANG", "es")
 
 TIMEZONE = os.getenv("TIMEZONE", "America/Monterrey")
-TZ = ZoneInfo(TIMEZONE)
+try:
+    TZ = ZoneInfo(TIMEZONE)
+except Exception:
+    print(f"[ERROR] Invalid TIMEZONE '{TIMEZONE}'. See: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones", flush=True)
+    sys.exit(1)
 
 USER_AGENT = os.getenv(
     "USER_AGENT",
-    "Mozilla/5.0 (compatible; multimedios-xmltv/1.0; +https://github.com/)",
+    "Mozilla/5.0 (compatible; multimedios-xmltv/1.0; +https://github.com/)",  # TODO: update with actual repo URL
 )
 TIMEOUT_SECONDS = int(os.getenv("TIMEOUT_SECONDS", "30"))
 
@@ -174,8 +179,6 @@ def parse_schedule(html: str) -> List[Programme]:
 
         m = SECTION_RE.search(ln)
         if m:
-            today_local = datetime.now(TZ).date()
-
             label = (m.group(1) or "").strip().lower()
             day_str = m.group(2)
 
@@ -280,9 +283,19 @@ def build_xmltv(programmes: List[Programme]) -> ET.ElementTree:
 
 def fetch_html(url: str) -> str:
     headers = {"User-Agent": USER_AGENT}
-    r = requests.get(url, headers=headers, timeout=TIMEOUT_SECONDS)
-    r.raise_for_status()
-    return r.text
+    last_exc: Exception = RuntimeError("No attempts made")
+    for attempt in range(1, 4):
+        try:
+            r = requests.get(url, headers=headers, timeout=TIMEOUT_SECONDS)
+            r.raise_for_status()
+            return r.text
+        except Exception as exc:
+            last_exc = exc
+            if attempt < 3:
+                wait = 2 ** attempt  # 2s, 4s
+                print(f"[WARN] Attempt {attempt} failed: {exc}. Retrying in {wait}s…", file=sys.stderr)
+                time_module.sleep(wait)
+    raise last_exc
 
 
 def ensure_output_dir(path: str) -> None:
